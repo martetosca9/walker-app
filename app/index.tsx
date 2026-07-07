@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Location from 'expo-location';
 import MapView, { Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
@@ -12,6 +12,38 @@ type Coordinate = {
 const FALLBACK_LOCATION: Coordinate = {
     latitude: 40.7128,
     longitude: -74.006,
+};
+
+const mapRegionFor = (coordinate: Coordinate, latitudeDelta = 0.01, longitudeDelta = 0.01) => ({
+    ...coordinate,
+    latitudeDelta,
+    longitudeDelta,
+});
+
+const getCurrentCoordinate = async (showAlert = false) => {
+    try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+            if (showAlert) {
+                Alert.alert('Location needed', 'Enable location permissions to start a workout.');
+            }
+
+            return null;
+        }
+
+        const loc = await Location.getCurrentPositionAsync({});
+
+        return {
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+        };
+    } catch {
+        if (showAlert) {
+            Alert.alert('Location unavailable', 'Try again when your GPS signal is ready.');
+        }
+
+        return null;
+    }
 };
 
 const formatDuration = (seconds: number) => {
@@ -120,22 +152,23 @@ export default function Home() {
     const [tracking, setTracking] = useState(false);
     const [location, setLocation] = useState<Coordinate | null>(null);
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
+    const [mapReady, setMapReady] = useState(false);
+    const mapRef = useRef<MapView | null>(null);
     const watchRef = useRef<Location.LocationSubscription | null>(null);
+    const hasCenteredOnUserRef = useRef(false);
+
+    const centerMapOn = useCallback((coordinate: Coordinate) => {
+        mapRef.current?.animateToRegion(mapRegionFor(coordinate), 500);
+    }, []);
 
     useEffect(() => {
         let mounted = true;
 
         (async () => {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') return;
+            const currentLocation = await getCurrentCoordinate();
+            if (!mounted || !currentLocation) return;
 
-            const loc = await Location.getCurrentPositionAsync({});
-            if (!mounted) return;
-
-            setLocation({
-                latitude: loc.coords.latitude,
-                longitude: loc.coords.longitude,
-            });
+            setLocation(currentLocation);
         })();
 
         return () => {
@@ -155,27 +188,63 @@ export default function Home() {
     }, [tracking]);
 
     const distance = useMemo(() => calculateDistance(coords), [coords]);
-    const mapLocation = location ?? FALLBACK_LOCATION;
+
+    useEffect(() => {
+        if (!mapReady || !location || hasCenteredOnUserRef.current) return;
+
+        hasCenteredOnUserRef.current = true;
+        centerMapOn(location);
+    }, [centerMapOn, location, mapReady]);
+
+    const stopTracking = useCallback(() => {
+        watchRef.current?.remove();
+        watchRef.current = null;
+        setTracking(false);
+    }, []);
 
     const startTracking = async () => {
         if (tracking) return;
 
-        setCoords(location ? [location] : []);
+        const currentLocation = (await getCurrentCoordinate(true)) ?? location;
+        if (!currentLocation) return;
+
+        watchRef.current?.remove();
+        watchRef.current = null;
+
+        setLocation(currentLocation);
+        setCoords([currentLocation]);
         setElapsedSeconds(0);
-        setTracking(true);
 
-        watchRef.current = await Location.watchPositionAsync(
-            { accuracy: Location.Accuracy.High, distanceInterval: 5 },
-            (loc) => {
-                const nextCoord = {
-                    latitude: loc.coords.latitude,
-                    longitude: loc.coords.longitude,
-                };
+        try {
+            watchRef.current = await Location.watchPositionAsync(
+                { accuracy: Location.Accuracy.High, distanceInterval: 5 },
+                (loc) => {
+                    const nextCoord = {
+                        latitude: loc.coords.latitude,
+                        longitude: loc.coords.longitude,
+                    };
 
-                setCoords((current) => [...current, nextCoord]);
-                setLocation(nextCoord);
-            }
-        );
+                    setCoords((current) => [...current, nextCoord]);
+                    setLocation(nextCoord);
+                }
+            );
+            setTracking(true);
+        } catch {
+            watchRef.current?.remove();
+            watchRef.current = null;
+            setCoords([]);
+            setElapsedSeconds(0);
+            setTracking(false);
+            Alert.alert('Workout not started', 'Location tracking could not be started.');
+        }
+    };
+
+    const centerOnCurrentLocation = async () => {
+        const currentLocation = (await getCurrentCoordinate(true)) ?? location;
+        if (!currentLocation) return;
+
+        setLocation(currentLocation);
+        centerMapOn(currentLocation);
     };
 
     return (
@@ -183,13 +252,11 @@ export default function Home() {
             <StatusBar style="dark" />
 
             <MapView
+                ref={mapRef}
                 style={styles.map}
                 provider={PROVIDER_DEFAULT}
-                region={{
-                    ...mapLocation,
-                    latitudeDelta: location ? 0.01 : 45,
-                    longitudeDelta: location ? 0.01 : 45,
-                }}
+                initialRegion={mapRegionFor(FALLBACK_LOCATION, 45, 45)}
+                onMapReady={() => setMapReady(true)}
                 showsUserLocation={Boolean(location)}
                 showsMyLocationButton={false}
             >
@@ -235,7 +302,11 @@ export default function Home() {
                     <Text style={styles.routeText}>Load Route</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.squareMapButton} activeOpacity={0.75}>
+                <TouchableOpacity
+                    style={styles.squareMapButton}
+                    activeOpacity={0.75}
+                    onPress={centerOnCurrentLocation}
+                >
                     <LocationArrowIcon />
                 </TouchableOpacity>
             </View>
@@ -256,9 +327,13 @@ export default function Home() {
                     </View>
                 </View>
 
-                <TouchableOpacity style={styles.startButton} activeOpacity={0.85} onPress={startTracking}>
+                <TouchableOpacity
+                    style={styles.startButton}
+                    activeOpacity={0.85}
+                    onPress={tracking ? stopTracking : startTracking}
+                >
                     <Text style={styles.startButtonText}>
-                        {tracking ? 'WORKOUT STARTED' : 'START WORKOUT'}
+                        {tracking ? 'STOP WORKOUT' : 'START WORKOUT'}
                     </Text>
                 </TouchableOpacity>
 
