@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Location from 'expo-location';
+import { router } from 'expo-router';
 import MapView, { Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import { formatDuration, saveWorkout } from '../lib/workouts';
 
 type Coordinate = {
     latitude: number;
@@ -44,13 +46,6 @@ const getCurrentCoordinate = async (showAlert = false) => {
 
         return null;
     }
-};
-
-const formatDuration = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
 const distanceBetween = (start: Coordinate, end: Coordinate) => {
@@ -202,6 +197,27 @@ export default function Home() {
         setTracking(false);
     }, []);
 
+    const handleStopWorkout = async () => {
+        const workoutCoords = coords;
+        const workoutDuration = elapsedSeconds;
+        const workoutDistance = distance;
+
+        stopTracking();
+
+        if (workoutDuration < 1 || workoutCoords.length === 0) return;
+
+        try {
+            await saveWorkout({
+                finishedAt: new Date().toISOString(),
+                distanceKm: workoutDistance,
+                durationSeconds: workoutDuration,
+                coordinates: workoutCoords,
+            });
+        } catch {
+            Alert.alert('Could not save workout', 'Your walk was stopped but not saved.');
+        }
+    };
+
     const startTracking = async () => {
         if (tracking) return;
 
@@ -330,7 +346,7 @@ export default function Home() {
                 <TouchableOpacity
                     style={styles.startButton}
                     activeOpacity={0.85}
-                    onPress={tracking ? stopTracking : startTracking}
+                    onPress={tracking ? handleStopWorkout : startTracking}
                 >
                     <Text style={styles.startButtonText}>
                         {tracking ? 'STOP WORKOUT' : 'START WORKOUT'}
@@ -339,7 +355,13 @@ export default function Home() {
 
                 <View style={styles.bottomNav}>
                     <BottomNavIcon active />
-                    <BottomNavIcon />
+                    <TouchableOpacity
+                        style={styles.navButton}
+                        activeOpacity={0.7}
+                        onPress={() => router.push('/history')}
+                    >
+                        <BottomNavIcon />
+                    </TouchableOpacity>
                     <BottomNavIcon />
                     <BottomNavIcon />
                 </View>
@@ -644,6 +666,10 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-around',
+    },
+    navButton: {
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     navIcon: {
         width: 42,
