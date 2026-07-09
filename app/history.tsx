@@ -35,20 +35,20 @@ export default function History() {
 
             <SafeAreaView style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-                    <Text style={styles.backText}>Back</Text>
+                    <Text style={styles.backText} allowFontScaling={false}>Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.title}>History</Text>
-                <Text style={styles.subtitle}>Saved walks</Text>
+                <Text style={styles.title} allowFontScaling={false}>History</Text>
+                <Text style={styles.subtitle} allowFontScaling={false}>Saved walks</Text>
             </SafeAreaView>
 
             {loading ? (
                 <View style={styles.centered}>
-                    <ActivityIndicator size="large" color="#111" />
+                    <ActivityIndicator size="large" color="#1d1d1f" />
                 </View>
             ) : workouts.length === 0 ? (
                 <View style={styles.centered}>
-                    <Text style={styles.emptyTitle}>No walks yet</Text>
-                    <Text style={styles.emptyText}>Stop a workout on the home screen to save it here.</Text>
+                    <Text style={styles.emptyTitle} allowFontScaling={false}>No walks yet</Text>
+                    <Text style={styles.emptyText} allowFontScaling={false}>Stop a workout on the home screen to save it here.</Text>
                 </View>
             ) : (
                 <FlatList
@@ -57,15 +57,15 @@ export default function History() {
                     contentContainerStyle={styles.list}
                     renderItem={({ item }) => (
                         <View style={styles.card}>
-                            <Text style={styles.cardDate}>{formatWorkoutDate(item.finishedAt)}</Text>
+                            <Text style={styles.cardDate} allowFontScaling={false}>{formatWorkoutDate(item.finishedAt)}</Text>
                             <View style={styles.cardMetrics}>
                                 <View>
-                                    <Text style={styles.metricValue}>{item.distanceKm.toFixed(1)}</Text>
-                                    <Text style={styles.metricLabel}>km</Text>
+                                    <Text style={styles.metricValue} allowFontScaling={false}>{item.distanceKm.toFixed(1)}</Text>
+                                    <Text style={styles.metricLabel} allowFontScaling={false}>km</Text>
                                 </View>
                                 <View>
-                                    <Text style={styles.metricValue}>{formatDuration(item.durationSeconds)}</Text>
-                                    <Text style={styles.metricLabel}>duration</Text>
+                                    <Text style={styles.metricValue} allowFontScaling={false}>{formatDuration(item.durationSeconds)}</Text>
+                                    <Text style={styles.metricLabel} allowFontScaling={false}>duration</Text>
                                 </View>
                             </View>
                         </View>
@@ -91,18 +91,18 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     backText: {
-        color: '#111',
-        fontSize: 18,
+        color: '#007aff',
+        fontSize: 16,
         fontWeight: '600',
     },
     title: {
-        color: '#050505',
-        fontSize: 32,
-        fontWeight: '800',
+        color: '#1d1d1f',
+        fontSize: 24,
+        fontWeight: '700',
     },
     subtitle: {
-        color: '#6f6f6f',
-        fontSize: 20,
+        color: '#86868b',
+        fontSize: 14,
         marginTop: 4,
     },
     centered: {
@@ -112,16 +112,16 @@ const styles = StyleSheet.create({
         paddingHorizontal: 32,
     },
     emptyTitle: {
-        color: '#111',
-        fontSize: 24,
-        fontWeight: '700',
+        color: '#1d1d1f',
+        fontSize: 18,
+        fontWeight: '600',
         marginBottom: 8,
     },
     emptyText: {
-        color: '#6f6f6f',
-        fontSize: 18,
+        color: '#86868b',
+        fontSize: 14,
         textAlign: 'center',
-        lineHeight: 26,
+        lineHeight: 20,
     },
     list: {
         paddingHorizontal: 24,
@@ -130,12 +130,12 @@ const styles = StyleSheet.create({
     },
     card: {
         borderRadius: 12,
-        backgroundColor: '#f5f5f5',
-        padding: 20,
+        backgroundColor: '#f5f5f7',
+        padding: 16,
     },
     cardDate: {
-        color: '#6f6f6f',
-        fontSize: 16,
+        color: '#86868b',
+        fontSize: 14,
         marginBottom: 12,
     },
     cardMetrics: {
@@ -143,13 +143,13 @@ const styles = StyleSheet.create({
         gap: 32,
     },
     metricValue: {
-        color: '#000',
-        fontSize: 36,
+        color: '#1d1d1f',
+        fontSize: 28,
         fontWeight: '800',
     },
     metricLabel: {
-        color: '#111',
-        fontSize: 16,
+        color: '#86868b',
+        fontSize: 12,
         marginTop: 2,
     },
 });

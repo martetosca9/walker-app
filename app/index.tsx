@@ -29,11 +29,35 @@ const getCurrentCoordinate = async (showAlert = false) => {
             if (showAlert) {
                 Alert.alert('Location needed', 'Enable location permissions to start a workout.');
             }
-
             return null;
         }
 
-        const loc = await Location.getCurrentPositionAsync({});
+        // Try getting last known position first (fast, doesn't hang)
+        try {
+            const lastKnown = await Location.getLastKnownPositionAsync({});
+            if (lastKnown) {
+                return {
+                    latitude: lastKnown.coords.latitude,
+                    longitude: lastKnown.coords.longitude,
+                };
+            }
+        } catch {
+            // Silently fail to try current position next
+        }
+
+        // Fallback to getCurrentPositionAsync but with a race timeout so it doesn't hang forever
+        const positionPromise = Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+        });
+
+        const timeoutPromise = new Promise<null>((resolve) =>
+            setTimeout(() => resolve(null), 3000)
+        );
+
+        const loc = await Promise.race([positionPromise, timeoutPromise]);
+        if (!loc) {
+            return null;
+        }
 
         return {
             latitude: loc.coords.latitude,
@@ -43,7 +67,6 @@ const getCurrentCoordinate = async (showAlert = false) => {
         if (showAlert) {
             Alert.alert('Location unavailable', 'Try again when your GPS signal is ready.');
         }
-
         return null;
     }
 };
@@ -100,7 +123,7 @@ function GearIcon() {
                     key={index}
                     style={[
                         styles.gearTooth,
-                        { transform: [{ rotate: `${index * 45}deg` }, { translateY: -17 }] },
+                        { transform: [{ rotate: `${index * 45}deg` }, { translateY: -9 }] },
                     ]}
                 />
             ))}
@@ -115,10 +138,10 @@ function GpsIcon() {
     return (
         <View style={styles.gpsIcon}>
             <View style={styles.signalBars}>
+                <View style={[styles.signalBar, { height: 6 }]} />
+                <View style={[styles.signalBar, { height: 9 }]} />
                 <View style={[styles.signalBar, { height: 12 }]} />
-                <View style={[styles.signalBar, { height: 18 }]} />
-                <View style={[styles.signalBar, { height: 24 }]} />
-                <View style={[styles.signalBar, { height: 30 }]} />
+                <View style={[styles.signalBar, { height: 15 }]} />
             </View>
             <View style={styles.signalSlash} />
         </View>
@@ -289,7 +312,7 @@ export default function Home() {
 
                     <View style={styles.topActions}>
                         <TouchableOpacity style={styles.roundIconButton} activeOpacity={0.7}>
-                            <Text style={styles.walkBadge}>W</Text>
+                            <Text style={styles.walkBadge} allowFontScaling={false}>W</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
                             <BellIcon />
@@ -299,8 +322,8 @@ export default function Home() {
 
                 <View style={styles.titleRow}>
                     <View>
-                        <Text style={styles.title}>Walk</Text>
-                        <Text style={styles.subtitle}>Choose your activity</Text>
+                        <Text style={styles.title} allowFontScaling={false}>Walk</Text>
+                        <Text style={styles.subtitle} allowFontScaling={false}>Choose your activity</Text>
                     </View>
                     <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
                         <GearIcon />
@@ -311,11 +334,11 @@ export default function Home() {
             <View style={styles.mapControls}>
                 <TouchableOpacity style={styles.squareMapButton} activeOpacity={0.75}>
                     <GpsIcon />
-                    <Text style={styles.gpsText}>GPS</Text>
+                    <Text style={styles.gpsText} allowFontScaling={false}>GPS</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.routeButton} activeOpacity={0.8}>
-                    <Text style={styles.routeText}>Load Route</Text>
+                    <Text style={styles.routeText} allowFontScaling={false}>Load Route</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -332,23 +355,23 @@ export default function Home() {
 
                 <View style={styles.metrics}>
                     <View style={styles.metricBlock}>
-                        <Text style={styles.metricValue}>{distance.toFixed(1)}</Text>
-                        <Text style={styles.metricLabel}>Distance</Text>
-                        <Text style={styles.metricUnit}>(km)</Text>
+                        <Text style={styles.metricValue} allowFontScaling={false}>{distance.toFixed(1)}</Text>
+                        <Text style={styles.metricLabel} allowFontScaling={false}>Distance</Text>
+                        <Text style={styles.metricUnit} allowFontScaling={false}>(km)</Text>
                     </View>
 
                     <View style={styles.metricBlock}>
-                        <Text style={styles.metricValue}>{formatDuration(elapsedSeconds)}</Text>
-                        <Text style={styles.metricLabel}>Duration</Text>
+                        <Text style={styles.metricValue} allowFontScaling={false}>{formatDuration(elapsedSeconds)}</Text>
+                        <Text style={styles.metricLabel} allowFontScaling={false}>Duration</Text>
                     </View>
                 </View>
 
                 <TouchableOpacity
-                    style={styles.startButton}
+                    style={[styles.startButton, tracking && styles.stopButton]}
                     activeOpacity={0.85}
                     onPress={tracking ? handleStopWorkout : startTracking}
                 >
-                    <Text style={styles.startButtonText}>
+                    <Text style={styles.startButtonText} allowFontScaling={false}>
                         {tracking ? 'STOP WORKOUT' : 'START WORKOUT'}
                     </Text>
                 </TouchableOpacity>
@@ -373,18 +396,29 @@ export default function Home() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: '#f5f5f7',
     },
     map: {
         ...StyleSheet.absoluteFill,
     },
     header: {
-        backgroundColor: '#fff',
-        paddingHorizontal: 24,
-        paddingBottom: 18,
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        paddingHorizontal: 20,
+        paddingBottom: 12,
+        borderBottomLeftRadius: 16,
+        borderBottomRightRadius: 16,
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 2,
     },
     topBar: {
-        minHeight: 88,
+        height: 50,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -392,208 +426,205 @@ const styles = StyleSheet.create({
     topActions: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 24,
+        gap: 16,
     },
     titleRow: {
         flexDirection: 'row',
-        alignItems: 'flex-end',
+        alignItems: 'center',
         justifyContent: 'space-between',
+        marginTop: 4,
     },
     title: {
-        color: '#050505',
-        fontSize: 32,
-        fontWeight: '800',
-        letterSpacing: 0,
+        color: '#1d1d1f',
+        fontSize: 24,
+        fontWeight: '700',
     },
     subtitle: {
-        color: '#6f6f6f',
-        fontSize: 24,
-        lineHeight: 32,
-        letterSpacing: 0,
+        color: '#86868b',
+        fontSize: 14,
+        lineHeight: 18,
     },
     iconButton: {
-        width: 44,
-        height: 44,
+        width: 36,
+        height: 36,
         alignItems: 'center',
         justifyContent: 'center',
     },
     roundIconButton: {
-        width: 44,
-        height: 44,
-        borderWidth: 4,
-        borderColor: '#111',
-        borderRadius: 22,
+        width: 32,
+        height: 32,
+        borderWidth: 2,
+        borderColor: '#1d1d1f',
+        borderRadius: 16,
         alignItems: 'center',
         justifyContent: 'center',
     },
     walkBadge: {
-        color: '#111',
-        fontSize: 18,
-        fontWeight: '900',
-        letterSpacing: 0,
+        color: '#1d1d1f',
+        fontSize: 14,
+        fontWeight: '800',
     },
     menuIcon: {
-        width: 38,
-        gap: 6,
+        width: 20,
+        gap: 4,
     },
     menuLine: {
-        height: 4,
-        backgroundColor: '#222',
-        borderRadius: 2,
+        height: 2,
+        backgroundColor: '#1d1d1f',
+        borderRadius: 1,
     },
     bellIcon: {
-        width: 30,
-        height: 34,
+        width: 18,
+        height: 20,
         alignItems: 'center',
         justifyContent: 'flex-end',
     },
     bellDome: {
-        width: 24,
-        height: 24,
-        borderWidth: 4,
-        borderColor: '#111',
+        width: 14,
+        height: 14,
+        borderWidth: 2,
+        borderColor: '#1d1d1f',
         borderBottomWidth: 0,
-        borderTopLeftRadius: 13,
-        borderTopRightRadius: 13,
+        borderTopLeftRadius: 7,
+        borderTopRightRadius: 7,
     },
     bellBase: {
-        width: 30,
-        height: 8,
-        borderBottomWidth: 4,
-        borderLeftWidth: 4,
-        borderRightWidth: 4,
-        borderColor: '#111',
-        borderBottomLeftRadius: 4,
-        borderBottomRightRadius: 4,
+        width: 18,
+        height: 5,
+        borderBottomWidth: 2,
+        borderLeftWidth: 2,
+        borderRightWidth: 2,
+        borderColor: '#1d1d1f',
+        borderBottomLeftRadius: 2,
+        borderBottomRightRadius: 2,
     },
     bellClapper: {
-        width: 8,
-        height: 4,
-        borderRadius: 4,
-        backgroundColor: '#111',
+        width: 4,
+        height: 3,
+        borderRadius: 2,
+        backgroundColor: '#1d1d1f',
         marginTop: -1,
     },
     gearIcon: {
-        width: 42,
-        height: 42,
+        width: 24,
+        height: 24,
         alignItems: 'center',
         justifyContent: 'center',
     },
     gearTooth: {
         position: 'absolute',
-        width: 10,
-        height: 12,
-        borderRadius: 2,
-        backgroundColor: '#000',
+        width: 4,
+        height: 6,
+        borderRadius: 1,
+        backgroundColor: '#1d1d1f',
     },
     gearOuter: {
-        width: 30,
-        height: 30,
-        borderRadius: 15,
-        backgroundColor: '#000',
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: '#1d1d1f',
         alignItems: 'center',
         justifyContent: 'center',
     },
     gearInner: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
+        width: 6,
+        height: 6,
+        borderRadius: 3,
         backgroundColor: '#fff',
     },
     mapControls: {
         position: 'absolute',
-        top: 245,
-        left: 28,
-        right: 28,
+        bottom: 235,
+        left: 20,
+        right: 20,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
     },
     squareMapButton: {
-        width: 80,
-        height: 80,
-        borderRadius: 6,
+        width: 48,
+        height: 48,
+        borderRadius: 8,
         backgroundColor: '#fff',
         alignItems: 'center',
         justifyContent: 'center',
         shadowColor: '#000',
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
         elevation: 3,
     },
     gpsIcon: {
-        width: 40,
-        height: 34,
+        width: 24,
+        height: 18,
         justifyContent: 'flex-end',
+        alignItems: 'center',
     },
     signalBars: {
-        height: 30,
+        height: 16,
         flexDirection: 'row',
         alignItems: 'flex-end',
         justifyContent: 'center',
-        gap: 3,
+        gap: 2,
     },
     signalBar: {
-        width: 4,
-        backgroundColor: '#999',
+        width: 2.5,
+        backgroundColor: '#86868b',
     },
     signalSlash: {
         position: 'absolute',
         left: 2,
-        top: 15,
-        width: 42,
-        height: 3,
-        backgroundColor: '#777',
+        top: 8,
+        width: 20,
+        height: 2,
+        backgroundColor: '#86868b',
         transform: [{ rotate: '-28deg' }],
     },
     gpsText: {
-        color: '#111',
-        fontSize: 18,
+        color: '#1d1d1f',
+        fontSize: 10,
         fontWeight: '600',
-        lineHeight: 20,
-        letterSpacing: 0,
+        marginTop: 2,
     },
     routeButton: {
-        height: 86,
-        minWidth: 210,
-        paddingHorizontal: 32,
-        borderRadius: 2,
+        height: 48,
+        flex: 1,
+        marginHorizontal: 12,
+        borderRadius: 8,
         backgroundColor: '#fff',
         alignItems: 'center',
         justifyContent: 'center',
         shadowColor: '#000',
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
         elevation: 3,
     },
     routeText: {
-        color: '#111',
-        fontSize: 24,
-        fontWeight: '800',
-        letterSpacing: 0,
+        color: '#1d1d1f',
+        fontSize: 14,
+        fontWeight: '700',
     },
     locationArrow: {
         width: 0,
         height: 0,
-        borderLeftWidth: 14,
-        borderRightWidth: 14,
-        borderBottomWidth: 40,
+        borderLeftWidth: 8,
+        borderRightWidth: 8,
+        borderBottomWidth: 20,
         borderLeftColor: 'transparent',
         borderRightColor: 'transparent',
-        borderBottomColor: '#111',
-        transform: [{ rotate: '8deg' }],
+        borderBottomColor: '#1d1d1f',
+        transform: [{ rotate: '45deg' }],
     },
     locationArrowWing: {
         position: 'absolute',
-        left: -8,
-        top: 12,
+        left: -4,
+        top: 6,
         width: 0,
         height: 0,
-        borderLeftWidth: 8,
-        borderRightWidth: 8,
-        borderBottomWidth: 22,
+        borderLeftWidth: 4,
+        borderRightWidth: 4,
+        borderBottomWidth: 10,
         borderLeftColor: 'transparent',
         borderRightColor: 'transparent',
         borderBottomColor: '#fff',
@@ -603,100 +634,101 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
-        minHeight: 330,
-        paddingHorizontal: 28,
-        paddingTop: 22,
-        paddingBottom: 16,
         backgroundColor: '#fff',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 24,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: -4 },
+        elevation: 5,
     },
     dragHandle: {
         alignSelf: 'center',
-        width: 82,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#d0d0d0',
-        marginBottom: 26,
+        width: 36,
+        height: 5,
+        borderRadius: 2.5,
+        backgroundColor: '#e5e5ea',
+        marginBottom: 16,
     },
     metrics: {
         flexDirection: 'row',
         justifyContent: 'space-around',
-        alignItems: 'flex-start',
-        marginBottom: 28,
+        alignItems: 'center',
+        marginBottom: 16,
     },
     metricBlock: {
-        width: 150,
         alignItems: 'center',
+        flex: 1,
     },
     metricValue: {
-        color: '#000',
-        fontSize: 62,
-        lineHeight: 72,
-        fontWeight: '900',
-        letterSpacing: 0,
+        color: '#1d1d1f',
+        fontSize: 36,
+        fontWeight: '800',
     },
     metricLabel: {
-        color: '#111',
-        fontSize: 28,
-        lineHeight: 34,
-        letterSpacing: 0,
+        color: '#86868b',
+        fontSize: 12,
+        marginTop: 2,
     },
     metricUnit: {
-        color: '#111',
-        fontSize: 28,
-        lineHeight: 34,
-        letterSpacing: 0,
+        color: '#86868b',
+        fontSize: 10,
     },
     startButton: {
-        height: 70,
-        borderRadius: 6,
-        backgroundColor: '#000',
+        height: 50,
+        borderRadius: 10,
+        backgroundColor: '#1d1d1f',
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 28,
+        marginBottom: 16,
+    },
+    stopButton: {
+        backgroundColor: '#ff3b30',
     },
     startButtonText: {
         color: '#fff',
-        fontSize: 30,
-        fontWeight: '900',
-        letterSpacing: 0,
+        fontSize: 16,
+        fontWeight: '600',
     },
     bottomNav: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-around',
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: '#e5e5ea',
+        paddingTop: 12,
     },
     navButton: {
         alignItems: 'center',
         justifyContent: 'center',
     },
     navIcon: {
-        width: 42,
-        height: 42,
-        borderWidth: 3,
-        borderColor: '#a3a3a3',
-        borderRadius: 4,
+        width: 32,
+        height: 32,
+        borderWidth: 2,
+        borderColor: '#86868b',
+        borderRadius: 6,
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 5,
+        gap: 4,
     },
     navIconActive: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        borderColor: '#1d2730',
-        backgroundColor: '#1d2730',
+        borderColor: '#1d1d1f',
+        backgroundColor: '#1d1d1f',
     },
     navIconLine: {
-        width: 22,
-        height: 3,
-        borderRadius: 2,
-        backgroundColor: '#a3a3a3',
+        width: 14,
+        height: 2,
+        borderRadius: 1,
+        backgroundColor: '#86868b',
     },
     navIconLineActive: {
-        width: 4,
-        height: 26,
+        width: 3,
+        height: 18,
         backgroundColor: '#fff',
     },
 });
