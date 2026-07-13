@@ -56,7 +56,11 @@ export default function History() {
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={styles.list}
                     renderItem={({ item }) => (
-                        <View style={styles.card}>
+                        <TouchableOpacity
+                            style={styles.card}
+                            activeOpacity={0.7}
+                            onPress={() => router.push({ pathname: '/workout-detail', params: { id: item.id } })}
+                        >
                             <Text style={styles.cardDate} allowFontScaling={false}>{formatWorkoutDate(item.finishedAt)}</Text>
                             <View style={styles.cardMetrics}>
                                 <View>
@@ -68,7 +72,7 @@ export default function History() {
                                     <Text style={styles.metricLabel} allowFontScaling={false}>duration</Text>
                                 </View>
                             </View>
-                        </View>
+                        </TouchableOpacity>
                     )}
                 />
             )}

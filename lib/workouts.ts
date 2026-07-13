@@ -34,6 +34,14 @@ export const formatWorkoutDate = (isoDate: string) => {
     });
 };
 
+export const formatPace = (distanceKm: number, durationSeconds: number) => {
+    if (distanceKm <= 0) return "-'--\"";
+    const totalMinutes = (durationSeconds / 60) / distanceKm;
+    const paceMinutes = Math.floor(totalMinutes);
+    const paceSeconds = Math.round((totalMinutes - paceMinutes) * 60);
+    return `${paceMinutes}:${paceSeconds.toString().padStart(2, '0')} /km`;
+};
+
 export async function getWorkouts(): Promise<WorkoutRecord[]> {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
@@ -44,6 +52,11 @@ export async function getWorkouts(): Promise<WorkoutRecord[]> {
     } catch {
         return [];
     }
+}
+
+export async function getWorkoutById(id: string): Promise<WorkoutRecord | null> {
+    const workouts = await getWorkouts();
+    return workouts.find((w) => w.id === id) || null;
 }
 
 export async function saveWorkout(
@@ -59,3 +72,4 @@ export async function saveWorkout(
 
     return record;
 }
+
