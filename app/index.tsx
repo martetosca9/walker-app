@@ -1,10 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+    Alert,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    Modal,
+    FlatList,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import MapView, { Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
-import { formatDuration, saveWorkout } from '../lib/workouts';
+import {
+    formatDuration,
+    saveWorkout,
+    getWorkouts,
+    formatWorkoutDate,
+    WorkoutRecord,
+} from '../lib/workouts';
 
 type Coordinate = {
     latitude: number;
@@ -175,6 +190,11 @@ export default function Home() {
     const watchRef = useRef<Location.LocationSubscription | null>(null);
     const hasCenteredOnUserRef = useRef(false);
 
+    // States for Load Route / Ghost Route feature
+    const [ghostRoute, setGhostRoute] = useState<WorkoutRecord | null>(null);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [savedWorkouts, setSavedWorkouts] = useState<WorkoutRecord[]>([]);
+
     const centerMapOn = useCallback((coordinate: Coordinate) => {
         mapRef.current?.animateToRegion(mapRegionFor(coordinate), 500);
     }, []);
@@ -213,6 +233,16 @@ export default function Home() {
         hasCenteredOnUserRef.current = true;
         centerMapOn(location);
     }, [centerMapOn, location, mapReady]);
+
+    // Fit map to ghost route coordinates when loaded
+    useEffect(() => {
+        if (mapReady && ghostRoute && ghostRoute.coordinates.length > 0 && mapRef.current) {
+            mapRef.current.fitToCoordinates(ghostRoute.coordinates, {
+                edgePadding: { top: 120, right: 60, bottom: 260, left: 60 },
+                animated: true,
+            });
+        }
+    }, [mapReady, ghostRoute]);
 
     const stopTracking = useCallback(() => {
         watchRef.current?.remove();
@@ -286,6 +316,22 @@ export default function Home() {
         centerMapOn(currentLocation);
     };
 
+    const handleOpenLoadRoute = async () => {
+        const list = await getWorkouts();
+        setSavedWorkouts(list);
+        setModalVisible(true);
+    };
+
+    const handleSelectRoute = (route: WorkoutRecord) => {
+        setGhostRoute(route);
+        setModalVisible(false);
+    };
+
+    const handleClearRoute = () => {
+        setGhostRoute(null);
+        setModalVisible(false);
+    };
+
     return (
         <View style={styles.container}>
             <StatusBar style="dark" />
@@ -299,6 +345,14 @@ export default function Home() {
                 showsUserLocation={Boolean(location)}
                 showsMyLocationButton={false}
             >
+                {ghostRoute && ghostRoute.coordinates.length > 0 && (
+                    <Polyline
+                        coordinates={ghostRoute.coordinates}
+                        strokeColor="rgba(0, 122, 255, 0.45)"
+                        strokeWidth={6}
+                        lineDashPattern={[8, 12]}
+                    />
+                )}
                 {coords.length > 1 && (
                     <Polyline coordinates={coords} strokeColor="#111" strokeWidth={5} />
                 )}
@@ -337,8 +391,14 @@ export default function Home() {
                     <Text style={styles.gpsText} allowFontScaling={false}>GPS</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.routeButton} activeOpacity={0.8}>
-                    <Text style={styles.routeText} allowFontScaling={false}>Load Route</Text>
+                <TouchableOpacity
+                    style={[styles.routeButton, ghostRoute && styles.routeButtonActive]}
+                    activeOpacity={0.8}
+                    onPress={handleOpenLoadRoute}
+                >
+                    <Text style={styles.routeText} allowFontScaling={false}>
+                        {ghostRoute ? `Route: ${ghostRoute.distanceKm.toFixed(1)} km` : 'Load Route'}
+                    </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -389,6 +449,77 @@ export default function Home() {
                     <BottomNavIcon />
                 </View>
             </View>
+
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={modalVisible}
+                onRequestClose={() => setModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContainer}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle} allowFontScaling={false}>
+                                Select a Route
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.modalCloseButton}
+                                onPress={() => setModalVisible(false)}
+                            >
+                                <Text style={styles.modalCloseText} allowFontScaling={false}>
+                                    ✕
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {savedWorkouts.length === 0 ? (
+                            <Text style={styles.modalEmptyText} allowFontScaling={false}>
+                                No workouts saved yet. Record a workout first.
+                            </Text>
+                        ) : (
+                            <FlatList
+                                data={savedWorkouts}
+                                keyExtractor={(item) => item.id}
+                                style={styles.modalList}
+                                renderItem={({ item }) => {
+                                    const isActive = ghostRoute?.id === item.id;
+                                    return (
+                                        <TouchableOpacity
+                                            style={[styles.modalItem, isActive && styles.modalItemActive]}
+                                            activeOpacity={0.7}
+                                            onPress={() => handleSelectRoute(item)}
+                                        >
+                                            <View style={styles.modalItemHeader}>
+                                                <Text style={styles.modalItemDate} allowFontScaling={false}>
+                                                    {formatWorkoutDate(item.finishedAt)}
+                                                </Text>
+                                                <Text style={styles.modalItemDistance} allowFontScaling={false}>
+                                                    {item.distanceKm.toFixed(2)} km
+                                                </Text>
+                                            </View>
+                                            <Text style={styles.modalItemDuration} allowFontScaling={false}>
+                                                Duration: {formatDuration(item.durationSeconds)} min
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                }}
+                            />
+                        )}
+
+                        {ghostRoute && (
+                            <TouchableOpacity
+                                style={styles.modalClearButton}
+                                activeOpacity={0.8}
+                                onPress={handleClearRoute}
+                            >
+                                <Text style={styles.modalClearText} allowFontScaling={false}>
+                                    Clear Loaded Route
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -600,6 +731,11 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         elevation: 3,
     },
+    routeButtonActive: {
+        backgroundColor: '#e5f2ff',
+        borderWidth: 1,
+        borderColor: '#007aff',
+    },
     routeText: {
         color: '#1d1d1f',
         fontSize: 14,
@@ -730,5 +866,96 @@ const styles = StyleSheet.create({
         width: 3,
         height: 18,
         backgroundColor: '#fff',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    modalContainer: {
+        width: '100%',
+        maxHeight: '70%',
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 24,
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 10,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1d1d1f',
+    },
+    modalCloseButton: {
+        padding: 4,
+    },
+    modalCloseText: {
+        fontSize: 18,
+        color: '#86868b',
+        fontWeight: '600',
+    },
+    modalList: {
+        marginVertical: 8,
+    },
+    modalItem: {
+        paddingVertical: 14,
+        paddingHorizontal: 12,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: '#e5e5ea',
+    },
+    modalItemActive: {
+        backgroundColor: '#e5f2ff',
+        borderRadius: 10,
+    },
+    modalItemHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    modalItemDate: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1d1d1f',
+    },
+    modalItemDistance: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#007aff',
+    },
+    modalItemDuration: {
+        fontSize: 12,
+        color: '#86868b',
+    },
+    modalEmptyText: {
+        textAlign: 'center',
+        color: '#86868b',
+        fontSize: 14,
+        paddingVertical: 32,
+    },
+    modalClearButton: {
+        backgroundColor: '#ff3b30',
+        paddingVertical: 12,
+        borderRadius: 10,
+        alignItems: 'center',
+        marginTop: 16,
+    },
+    modalClearText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
     },
 });
