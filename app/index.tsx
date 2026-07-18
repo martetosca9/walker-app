@@ -183,12 +183,14 @@ function BottomNavIcon({ active = false }: { active?: boolean }) {
 export default function Home() {
     const [coords, setCoords] = useState<Coordinate[]>([]);
     const [tracking, setTracking] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
     const [location, setLocation] = useState<Coordinate | null>(null);
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
     const [mapReady, setMapReady] = useState(false);
     const mapRef = useRef<MapView | null>(null);
     const watchRef = useRef<Location.LocationSubscription | null>(null);
     const hasCenteredOnUserRef = useRef(false);
+    const isPausedRef = useRef(false);
 
     // States for Load Route / Ghost Route feature
     const [ghostRoute, setGhostRoute] = useState<WorkoutRecord | null>(null);
@@ -216,14 +218,14 @@ export default function Home() {
     }, []);
 
     useEffect(() => {
-        if (!tracking) return;
+        if (!tracking || isPaused) return;
 
         const timer = setInterval(() => {
             setElapsedSeconds((current) => current + 1);
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [tracking]);
+    }, [tracking, isPaused]);
 
     const distance = useMemo(() => calculateDistance(coords), [coords]);
 
@@ -248,7 +250,19 @@ export default function Home() {
         watchRef.current?.remove();
         watchRef.current = null;
         setTracking(false);
+        setIsPaused(false);
+        isPausedRef.current = false;
     }, []);
+
+    const pauseTracking = () => {
+        setIsPaused(true);
+        isPausedRef.current = true;
+    };
+
+    const resumeTracking = () => {
+        setIsPaused(false);
+        isPausedRef.current = false;
+    };
 
     const handleStopWorkout = async () => {
         const workoutCoords = coords;
@@ -283,6 +297,8 @@ export default function Home() {
         setLocation(currentLocation);
         setCoords([currentLocation]);
         setElapsedSeconds(0);
+        setIsPaused(false);
+        isPausedRef.current = false;
 
         try {
             watchRef.current = await Location.watchPositionAsync(
@@ -293,8 +309,10 @@ export default function Home() {
                         longitude: loc.coords.longitude,
                     };
 
-                    setCoords((current) => [...current, nextCoord]);
                     setLocation(nextCoord);
+                    if (!isPausedRef.current) {
+                        setCoords((current) => [...current, nextCoord]);
+                    }
                 }
             );
             setTracking(true);
@@ -304,6 +322,8 @@ export default function Home() {
             setCoords([]);
             setElapsedSeconds(0);
             setTracking(false);
+            setIsPaused(false);
+            isPausedRef.current = false;
             Alert.alert('Workout not started', 'Location tracking could not be started.');
         }
     };
@@ -426,15 +446,42 @@ export default function Home() {
                     </View>
                 </View>
 
-                <TouchableOpacity
-                    style={[styles.startButton, tracking && styles.stopButton]}
-                    activeOpacity={0.85}
-                    onPress={tracking ? handleStopWorkout : startTracking}
-                >
-                    <Text style={styles.startButtonText} allowFontScaling={false}>
-                        {tracking ? 'STOP WORKOUT' : 'START WORKOUT'}
-                    </Text>
-                </TouchableOpacity>
+                {tracking ? (
+                    <View style={styles.actionButtonsContainer}>
+                        <TouchableOpacity
+                            style={[
+                                styles.actionButton,
+                                isPaused ? styles.resumeButton : styles.pauseButton,
+                            ]}
+                            activeOpacity={0.85}
+                            onPress={isPaused ? resumeTracking : pauseTracking}
+                        >
+                            <Text style={styles.actionButtonText} allowFontScaling={false}>
+                                {isPaused ? 'RESUME' : 'PAUSE'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.actionButton, styles.stopWorkoutButton]}
+                            activeOpacity={0.85}
+                            onPress={handleStopWorkout}
+                        >
+                            <Text style={styles.actionButtonText} allowFontScaling={false}>
+                                STOP
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <TouchableOpacity
+                        style={styles.startButton}
+                        activeOpacity={0.85}
+                        onPress={startTracking}
+                    >
+                        <Text style={styles.startButtonText} allowFontScaling={false}>
+                            START WORKOUT
+                        </Text>
+                    </TouchableOpacity>
+                )}
 
                 <View style={styles.bottomNav}>
                     <BottomNavIcon active />
@@ -957,5 +1004,31 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 14,
         fontWeight: '600',
+    },
+    actionButtonsContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 16,
+    },
+    actionButton: {
+        flex: 1,
+        height: 50,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    pauseButton: {
+        backgroundColor: '#ff9500',
+    },
+    resumeButton: {
+        backgroundColor: '#34c759',
+    },
+    stopWorkoutButton: {
+        backgroundColor: '#ff3b30',
+    },
+    actionButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '700',
     },
 });
