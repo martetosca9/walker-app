@@ -73,3 +73,9 @@ export async function saveWorkout(
     return record;
 }
 
+export async function deleteWorkout(id: string): Promise<void> {
+    const existing = await getWorkouts();
+    const filtered = existing.filter((w) => w.id !== id);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+}
+

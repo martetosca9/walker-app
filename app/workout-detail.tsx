@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     SafeAreaView,
     StyleSheet,
     Text,
@@ -15,6 +16,7 @@ import {
     formatWorkoutDate,
     formatPace,
     getWorkoutById,
+    deleteWorkout,
     WorkoutRecord,
 } from '../lib/workouts';
 
@@ -35,6 +37,30 @@ export default function WorkoutDetail() {
         }
         void load();
     }, [id]);
+
+    const handleDelete = () => {
+        Alert.alert(
+            'Delete Walk',
+            'Are you sure you want to permanently delete this walk?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        if (workout) {
+                            try {
+                                await deleteWorkout(workout.id);
+                                router.back();
+                            } catch {
+                                Alert.alert('Error', 'Could not delete this walk.');
+                            }
+                        }
+                    },
+                },
+            ]
+        );
+    };
 
     useEffect(() => {
         if (mapReady && workout && workout.coordinates.length > 0 && mapRef.current) {
@@ -126,15 +152,26 @@ export default function WorkoutDetail() {
 
             <SafeAreaView style={styles.header}>
                 <View style={styles.headerContent}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => router.back()}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={styles.backText} allowFontScaling={false}>
-                            ← Back
-                        </Text>
-                    </TouchableOpacity>
+                    <View style={styles.headerTopRow}>
+                        <TouchableOpacity
+                            style={styles.backButton}
+                            onPress={() => router.back()}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.backText} allowFontScaling={false}>
+                                ← Back
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.deleteButton}
+                            onPress={handleDelete}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.deleteText} allowFontScaling={false}>
+                                Delete
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                     <View style={styles.titleContainer}>
                         <Text style={styles.title} allowFontScaling={false}>
                             Walk Summary
@@ -253,14 +290,26 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
         paddingTop: 8,
     },
+    headerTopRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
     backButton: {
-        alignSelf: 'flex-start',
         paddingVertical: 8,
         paddingRight: 16,
-        marginBottom: 8,
     },
     backText: {
         color: '#007aff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    deleteButton: {
+        paddingVertical: 8,
+        paddingLeft: 16,
+    },
+    deleteText: {
+        color: '#ff3b30',
         fontSize: 16,
         fontWeight: '600',
     },
